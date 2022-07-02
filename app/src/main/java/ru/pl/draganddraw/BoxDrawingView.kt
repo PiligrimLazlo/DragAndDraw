@@ -3,12 +3,10 @@ package ru.pl.draganddraw
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.PointF
 import android.os.Bundle
 import android.os.Parcelable
 import android.util.AttributeSet
-import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.minus
@@ -36,11 +34,11 @@ class BoxDrawingView(
 
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val startFirstPointer = PointF(event.x, event.y)
+        val firstPointer = PointF(event.x, event.y)
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                currentBox = Box(startFirstPointer).also {
+                currentBox = Box(firstPointer).also {
                     boxes.add(it)
                 }
             }
@@ -53,18 +51,18 @@ class BoxDrawingView(
                     val currentAngle = startSecondPointer?.let {
                         calculateAngleABC(
                             it,
-                            startFirstPointer,
+                            firstPointer,
                             endSecondPointer
                         )
                     } ?: 0f
-                    Log.i(TAG, "currentAngle is $currentAngle")
+                    //Log.i(TAG, "currentAngle is $currentAngle")
                     currentBox?.angle = currentAngle
                 }
 
-                updateCurrentBox(startFirstPointer, currentBox)
+                updateCurrentBox(firstPointer, currentBox)
             }
             MotionEvent.ACTION_UP -> {
-                updateCurrentBox(startFirstPointer, currentBox)
+                updateCurrentBox(firstPointer, currentBox)
                 nullFields()
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -78,8 +76,9 @@ class BoxDrawingView(
                     PointF(event.getX(secondPointerStart), event.getY(secondPointerStart))
             }
             MotionEvent.ACTION_POINTER_UP -> {
-                updateCurrentBox(startFirstPointer, currentBox)
-                nullFields()
+                updateCurrentBox(firstPointer, currentBox)
+                if (event.actionIndex == event.findPointerIndex(0))
+                    nullFields()
             }
         }
         return true
@@ -90,11 +89,11 @@ class BoxDrawingView(
         canvas.drawPaint(backgroundPaint)
 
         boxes.forEach { box ->
-            val path = Path()
-            path.addRect(box.left, box.top, box.right, box.bottom, Path.Direction.CW)
             canvas.save()
-            canvas.rotate(box.angle, 700f, 700f)
-            canvas.drawPath(path, boxPaint)
+            val centerX = box.start.x + ((box.end.x - box.start.x) / 2)
+            val centerY = box.start.y + ((box.end.y - box.start.y) / 2)
+            canvas.rotate(box.angle, centerX, centerY)
+            canvas.drawRect(box.left, box.top, box.right, box.bottom, boxPaint)
             canvas.restore()
         }
     }

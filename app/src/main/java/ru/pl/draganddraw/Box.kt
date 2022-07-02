@@ -2,11 +2,15 @@ package ru.pl.draganddraw
 
 import android.graphics.PointF
 import android.os.Parcelable
+import androidx.core.graphics.minus
 import kotlinx.parcelize.Parcelize
 
 
 @Parcelize
-data class Box(val start: PointF, var end: PointF = start) : Parcelable {
+data class Box(
+    val start: PointF, var end: PointF = start,
+    var angle: Float = 0f
+) : Parcelable {
 
 
     val left: Float

@@ -3,6 +3,7 @@ package ru.pl.draganddraw
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PointF
 import android.os.Bundle
 import android.os.Parcelable
@@ -10,6 +11,10 @@ import android.util.AttributeSet
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.graphics.minus
+import kotlin.math.PI
+import kotlin.math.acos
+import kotlin.math.sqrt
 
 private const val TAG = "BoxDrawingView"
 
@@ -19,7 +24,7 @@ class BoxDrawingView(
 ) : View(context, attrs) {
 
     private var currentBox: Box? = null
-    private var currentBox2: Box? = null
+    private var startSecondPointer: PointF? = null
 
     private val boxes = mutableListOf<Box>()
     private val boxPaint = Paint().apply {
@@ -31,76 +36,66 @@ class BoxDrawingView(
 
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val current = PointF(event.x, event.y)
-        var current2 = PointF()
-        if (event.findPointerIndex(1) != -1) {
-            val pointerIndex = event.findPointerIndex(1)
-            current2 = PointF(event.getX(pointerIndex), event.getY(pointerIndex))
-        }
-
-        fun handleActionUp() {
-            if (event.actionIndex == event.findPointerIndex(0)) {
-                updateCurrentBox(current, currentBox)
-                currentBox = null
-            } else if (event.actionIndex == event.findPointerIndex(1)) {
-                updateCurrentBox(current2, currentBox2)
-                currentBox2 = null
-            }
-        }
+        val startFirstPointer = PointF(event.x, event.y)
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                currentBox = Box(current).also {
+                currentBox = Box(startFirstPointer).also {
                     boxes.add(it)
                 }
             }
             MotionEvent.ACTION_MOVE -> {
-                if (event.findPointerIndex(0) != -1)
-                    updateCurrentBox(current, currentBox)
-                if (event.findPointerIndex(1) != -1)
-                    updateCurrentBox(current2, currentBox2)
+                if (event.findPointerIndex(1) != -1) {
+                    val secondPointerEndIndex = event.findPointerIndex(1)
+                    val endSecondPointer =
+                        PointF(event.getX(secondPointerEndIndex), event.getY(secondPointerEndIndex))
 
+                    val currentAngle = startSecondPointer?.let {
+                        calculateAngleABC(
+                            it,
+                            startFirstPointer,
+                            endSecondPointer
+                        )
+                    } ?: 0f
+                    Log.i(TAG, "currentAngle is $currentAngle")
+                    currentBox?.angle = currentAngle
+                }
 
-                Log.i(
-                    TAG, "action index ${event.actionIndex}, pointerIndex of id0:" +
-                            "${event.findPointerIndex(0)}, pointerIndex of id1: ${
-                                event.findPointerIndex(1)
-                            }"
-                )
-
-
+                updateCurrentBox(startFirstPointer, currentBox)
             }
             MotionEvent.ACTION_UP -> {
-                handleActionUp()
+                updateCurrentBox(startFirstPointer, currentBox)
+                nullFields()
             }
             MotionEvent.ACTION_CANCEL -> {
-                currentBox = null
-                currentBox2 = null
+                nullFields()
             }
 
 
             MotionEvent.ACTION_POINTER_DOWN -> {
-                if (event.actionIndex == event.findPointerIndex(1)) {
-                    currentBox2 = Box(current2).also {
-                        boxes.add(it)
-                    }
-                }
+                val secondPointerStart = event.findPointerIndex(1)
+                startSecondPointer =
+                    PointF(event.getX(secondPointerStart), event.getY(secondPointerStart))
             }
             MotionEvent.ACTION_POINTER_UP -> {
-                handleActionUp()
+                updateCurrentBox(startFirstPointer, currentBox)
+                nullFields()
             }
         }
-
-        /*Log.i(TAG, "$action2 at x=${secondCurrent.x}, y=${secondCurrent.y}")*/
-        /*Log.i(TAG, "$action at x=${current.x}, y=${current.y}")*/
         return true
     }
+
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawPaint(backgroundPaint)
 
         boxes.forEach { box ->
-            canvas.drawRect(box.left, box.top, box.right, box.bottom, boxPaint)
+            val path = Path()
+            path.addRect(box.left, box.top, box.right, box.bottom, Path.Direction.CW)
+            canvas.save()
+            canvas.rotate(box.angle, 700f, 700f)
+            canvas.drawPath(path, boxPaint)
+            canvas.restore()
         }
     }
 
@@ -109,6 +104,44 @@ class BoxDrawingView(
             it.end = current
             invalidate()
         }
+    }
+
+    private fun nullFields() {
+        currentBox = null
+        startSecondPointer = null
+    }
+
+    //calculate angle ABC
+    private fun calculateAngleABC(A: PointF, B: PointF, C: PointF): Float {
+        val BA = A - B
+        val BC = C - B
+
+        val BABC = (BA.x * BC.x) + (BA.y * BC.y)
+
+        val BAlength = sqrt((BA.x * BA.x) + (BA.y * BA.y))
+        val BClength = sqrt((BC.x * BC.x) + (BC.y * BC.y))
+
+        val cosABC = BABC / (BAlength * BClength)
+
+        val angle = ((180 / PI) * acos(cosABC)).toFloat()
+
+        //where started draw
+        val topLeft = B.x <= A.x && B.y <= A.y
+        val topRight = B.x >= A.x && B.y <= A.y
+        val botLeft = B.x <= A.x && B.y >= A.y
+        val botRight = B.x >= A.x && B.y >= A.y
+
+
+        if (topLeft && (C.y <= A.y || C.x >= A.x))
+            return -angle
+        else if (topRight && (C.y >= A.y || C.x >= A.x))
+            return -angle
+        else if (botLeft && (C.y <= A.y || C.x <= A.x))
+            return -angle
+        else if (botRight && (C.y >= A.y || C.x <= A.x))
+            return -angle
+        return angle
+
     }
 
     override fun onSaveInstanceState(): Parcelable {
